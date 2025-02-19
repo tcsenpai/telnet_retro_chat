@@ -6,6 +6,7 @@ from libs.broadcast import broadcast_message
 from libs.user_manager import UserManager
 from libs.process_message import CommandProcessor
 from libs.banner import load_banner
+from libs.room_manager import RoomManager
 
 # Load environment variables
 load_dotenv()
@@ -23,7 +24,8 @@ connections_lock = threading.Lock()  # Thread-safe operations on active_connecti
 
 # Initialize user management
 user_manager = UserManager()
-command_processor = CommandProcessor(user_manager)
+room_manager = RoomManager()
+command_processor = CommandProcessor(user_manager, room_manager)
 
 
 def handle_backspace(display_buffer, conn):
@@ -104,7 +106,19 @@ def process_complete_line(line, addr, active_connections, conn):
                 return
 
             # Broadcast the message
-            broadcast_message(active_connections, f"[{username}]: {message}")
+            current_room = room_manager.get_user_room(addr)
+            room = room_manager.rooms[current_room]
+            message_with_user = f"[{username}@{current_room}]: {message}"
+
+            # Send to room members
+            broadcast_message(
+                active_connections,
+                message_with_user,
+                addr,
+                room,
+            )
+            # Send back to sender
+            conn.sendall(f"\r\n{message_with_user}\r\n".encode("ascii"))
     except UnicodeDecodeError:
         print("UnicodeDecodeError: ", line)
 
@@ -121,6 +135,7 @@ def handle_client(conn, addr):
 
     # Register as guest initially
     username = user_manager.register_session(addr)
+    room_manager.join_room(addr, "lounge")  # Put user in default room
 
     # Check if username is banned
     if user_manager.is_banned(username):
@@ -140,7 +155,10 @@ def handle_client(conn, addr):
     )
     conn.sendall(welcome_msg.encode("ascii"))
     broadcast_message(
-        active_connections, f"* New user connected from {addr[0]} as {username}", addr
+        active_connections,
+        f"* New user connected from {addr[0]} as {username}",
+        addr,
+        system_msg=True,
     )
 
     # Initialize buffers
@@ -180,9 +198,13 @@ def handle_client(conn, addr):
 def cleanup_client_connection(addr):
     """Clean up resources when a client disconnects."""
     print(f"Client {addr} disconnected")
+    username = user_manager.get_username(addr)
+    room_manager.leave_current_room(addr)
     with connections_lock:
         del active_connections[addr]
-    broadcast_message(active_connections, f"* User {addr[0]} disconnected")
+    broadcast_message(
+        active_connections, f"* User {username} disconnected", system_msg=True
+    )
 
 
 def start_server():

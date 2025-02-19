@@ -1,21 +1,24 @@
-def broadcast_message(connections, message, sender_addr=None):
-    """
-    Broadcasts a message to all connected clients.
-
-    Args:
-        connections (dict): Dictionary of active connections {addr: socket}
-        message (str): Message to broadcast
-        sender_addr (tuple, optional): Address of the sender to exclude
-    """
+def broadcast_message(
+    connections, message, sender_addr=None, room=None, system_msg=False
+):
+    """Broadcasts a message to all users in a room or system-wide."""
     formatted_message = f"\r\n{message}\r\n"
     encoded_message = formatted_message.encode("ascii")
 
-    for addr, conn in connections.items():
+    # Get recipients based on room, unless it's a system message
+    recipients = (
+        connections.keys()
+        if system_msg
+        else (room.users if room else connections.keys())
+    )
+
+    for addr in recipients:
+        if addr not in connections:
+            continue
         try:
-            # Don't send back to the sender if specified
             if sender_addr and addr == sender_addr:
                 continue
-            conn.sendall(encoded_message)
+            connections[addr].sendall(encoded_message)
         except (ConnectionError, BrokenPipeError):
             print(f"Error sending message to {addr}")
         except:

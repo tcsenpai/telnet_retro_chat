@@ -2,8 +2,9 @@ from typing import Tuple
 
 
 class CommandProcessor:
-    def __init__(self, user_manager):
+    def __init__(self, user_manager, room_manager):
         self.user_manager = user_manager
+        self.room_manager = room_manager
         self.commands = {
             "help": self.cmd_help,
             "login": self.cmd_login,
@@ -16,6 +17,9 @@ class CommandProcessor:
             "ban": self.cmd_ban,
             "broadcast": self.cmd_broadcast,
             "passwd": self.cmd_passwd,
+            "join": self.cmd_join,
+            "rooms": self.cmd_rooms,
+            "createroom": self.cmd_createroom,
         }
 
     def process_command(self, message: str, addr: Tuple) -> str:
@@ -48,6 +52,8 @@ class CommandProcessor:
         auth_commands = {
             "broadcast": "Broadcast a message to all users",
             "users": "List online users",
+            "join": "Join a chat room",
+            "rooms": "List available rooms",
         }
 
         # Admin commands
@@ -56,6 +62,7 @@ class CommandProcessor:
             "deop": "Remove admin privileges from user",
             "kick": "Disconnect a user from the server",
             "ban": "Ban a username from the server",
+            "createroom": "Create a new chat room",
         }
 
         # Build help message
@@ -190,10 +197,9 @@ class CommandProcessor:
         if not args:
             return "Usage: broadcast <message>"
 
-        # Check if user is authenticated (not a guest)
-        username = self.user_manager.get_username(addr)
-        if username.startswith("guest_"):
-            return "You must be logged in to broadcast messages"
+        # Check if user is admin
+        if not self.user_manager.is_admin(addr):
+            return "You must be an admin to broadcast messages"
 
         if self.user_manager.is_rate_limited(addr):
             return "Rate limit exceeded. Please wait a moment."
@@ -217,3 +223,40 @@ class CommandProcessor:
         if self.user_manager.change_password(username, new_password):
             return "Password changed successfully"
         return "Failed to change password"
+
+    def cmd_join(self, args, addr):
+        """Join a chat room."""
+        if len(args) != 1:
+            return "Usage: join <room>"
+
+        room_name = args[0]
+        if self.room_manager.join_room(addr, room_name):
+            return f"Joined room: {room_name}"
+        return "Room not found"
+
+    def cmd_rooms(self, args, addr):
+        """List available rooms."""
+        rooms = self.room_manager.list_rooms()
+        current_room = self.room_manager.get_user_room(addr)
+
+        room_list = ["+--------AVAILABLE ROOMS--------+"]
+        for name, desc in rooms.items():
+            current = " (current)" if name == current_room else ""
+            room_list.append(f"# {name:<15} - {desc[:20]}{current}")
+        room_list.append("+-----------------------------+")
+        return "\n".join(room_list)
+
+    def cmd_createroom(self, args, addr):
+        """Create a new room (admin only)."""
+        if not self.user_manager.is_admin(addr):
+            return "You don't have permission to create rooms"
+
+        if len(args) < 1:
+            return "Usage: createroom <name> [description]"
+
+        name = args[0]
+        description = " ".join(args[1:]) if len(args) > 1 else ""
+
+        if self.room_manager.create_room(name, description):
+            return f"Room {name} created successfully"
+        return "Room already exists"
