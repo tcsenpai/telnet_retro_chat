@@ -20,6 +20,7 @@ class CommandProcessor:
             "join": self.cmd_join,
             "rooms": self.cmd_rooms,
             "createroom": self.cmd_createroom,
+            "quit": self.cmd_quit,
         }
 
     def process_command(self, message: str, addr: Tuple) -> str:
@@ -46,6 +47,7 @@ class CommandProcessor:
             "login": "Login with username and password",
             "whoami": "Show current username",
             "register": "Register new user",
+            "quit": "Disconnect from server",
         }
 
         # Commands for authenticated users
@@ -260,3 +262,7 @@ class CommandProcessor:
         if self.room_manager.create_room(name, description):
             return f"Room {name} created successfully"
         return "Room already exists"
+
+    def cmd_quit(self, args, addr):
+        """Disconnect from the server."""
+        return "@QUIT@"

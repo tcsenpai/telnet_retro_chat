@@ -88,6 +88,11 @@ def process_complete_line(line, addr, active_connections, conn):
                 )
                 return
 
+            if response.startswith("@QUIT@"):
+                conn.sendall(b"\r\nGoodbye!\r\n")
+                conn.close()
+                return
+
             conn.sendall(f"\r\n{response}\r\n".encode("ascii"))
         else:
             # Regular chat message
@@ -207,18 +212,37 @@ def cleanup_client_connection(addr):
     )
 
 
+def handle_server_input():
+    """Handle input from server console."""
+    fake_addr = ("console", 0)
+    user_manager.register_session(fake_addr, "admin")
+    room_manager.join_room(fake_addr, "lounge")
+
+    while True:
+        try:
+            message = input()
+            if message.strip():
+                process_complete_line(
+                    message.encode("ascii"), fake_addr, active_connections, None
+                )
+        except EOFError:
+            break
+
+
 def start_server():
-    """
-    Starts the server and listens for incoming connections.
-    """
+    """Starts the server and listens for incoming connections."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
         server.bind((HOST, PORT))
         server.listen(MAX_CONNECTIONS)
         print(f"[TELTCSERVER] Listening on port {PORT}...")
         print(f"[TELTCSERVER] Maximum connections allowed: {MAX_CONNECTIONS}")
 
+        # Start server console input thread
+        console_thread = threading.Thread(target=handle_server_input)
+        console_thread.daemon = True
+        console_thread.start()
+
         while True:
-            # Accept new connection
             conn, addr = server.accept()
 
             # Check if maximum connections reached
