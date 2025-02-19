@@ -117,8 +117,10 @@ def process_complete_line(line, addr, active_connections, conn):
                 room,
             )
 
-            # For console, print locally instead of sending
-            if not conn:
+            # Send back to sender (if not console)
+            if conn:
+                conn.sendall(f"\r\n{message_with_user}\r\n".encode("ascii"))
+            else:
                 print(f"\r\n{message_with_user}\r\n")
 
     except UnicodeDecodeError:

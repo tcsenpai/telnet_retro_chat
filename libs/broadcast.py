@@ -12,8 +12,12 @@ def broadcast_message(
         else (room.users if room else connections.keys())
     )
 
+    # Always show to console
+    print(formatted_message)
+
+    # Send to other recipients
     for addr in recipients:
-        if addr not in connections:
+        if addr not in connections or addr == ("console", 0):
             continue
         try:
             if sender_addr and addr == sender_addr:
