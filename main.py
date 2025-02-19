@@ -7,6 +7,7 @@ from libs.user_manager import UserManager
 from libs.process_message import CommandProcessor
 from libs.banner import load_banner
 from libs.room_manager import RoomManager
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -26,6 +27,23 @@ connections_lock = threading.Lock()  # Thread-safe operations on active_connecti
 user_manager = UserManager()
 room_manager = RoomManager()
 command_processor = CommandProcessor(user_manager, room_manager)
+
+
+def log_connection(addr, event_type, username=None):
+    """Log connection events with timestamp."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ip = addr[0] if addr[0] != "console" else "SERVER"
+    username = username or user_manager.get_username(addr)
+
+    log_entry = f"[{timestamp}] {ip} - {event_type} - {username}\n"
+
+    # Ensure logs directory exists
+    os.makedirs("logs", exist_ok=True)
+
+    # Append to daily log file
+    date = datetime.now().strftime("%Y-%m-%d")
+    with open(f"logs/connections_{date}.log", "a") as f:
+        f.write(log_entry)
 
 
 def handle_backspace(display_buffer, conn):
@@ -138,6 +156,7 @@ def handle_client(conn, addr):
         addr (tuple): Client address information
     """
     print(f"Connected by {addr}")
+    log_connection(addr, "CONNECT")
 
     # Register as guest initially
     username = user_manager.register_session(addr)
@@ -204,6 +223,7 @@ def handle_client(conn, addr):
 def cleanup_client_connection(addr):
     """Clean up resources when a client disconnects."""
     print(f"Client {addr} disconnected")
+    log_connection(addr, "DISCONNECT")
     username = user_manager.get_username(addr)
     room_manager.leave_current_room(addr)
     with connections_lock:
