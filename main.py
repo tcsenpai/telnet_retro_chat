@@ -214,8 +214,8 @@ def start_server():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
         server.bind((HOST, PORT))
         server.listen(MAX_CONNECTIONS)
-        print(f"Listening on port {PORT}...")
-        print(f"Maximum connections allowed: {MAX_CONNECTIONS}")
+        print(f"[TELTCSERVER] Listening on port {PORT}...")
+        print(f"[TELTCSERVER] Maximum connections allowed: {MAX_CONNECTIONS}")
 
         while True:
             # Accept new connection
