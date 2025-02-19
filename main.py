@@ -51,63 +51,57 @@ def process_input_byte(byte, display_buffer, conn):
 def process_complete_line(line, addr, active_connections, conn):
     """Process a complete line of input and broadcast if valid."""
     try:
-        # Clean up the input by processing backspaces
-        cleaned = []
-        for char in line:
-            if char in (8, 127):  # Backspace/delete
-                if cleaned:
-                    cleaned.pop()
-            else:
-                cleaned.append(char)
+        message = line.decode("ascii").strip()
+        if not message:
+            return
 
-        message = bytes(cleaned).decode("ascii", "ignore").strip()
-        print(f"Client {addr}: {message}")
-
-        # Process commands
+        # Check if it's a command
         if message.startswith("/"):
             response = command_processor.process_command(message[1:], addr)
-
-            # Handle special responses
-            if response.startswith("@KICK@"):
-                _, kick_addr = response.split("@", 2)
-                # Convert string addr back to tuple
-                kick_addr = eval(kick_addr)  # Safe here as we control the input
-                if kick_addr in active_connections:
-                    active_connections[kick_addr].sendall(
-                        b"\r\nYou have been kicked from the server.\r\n"
-                    )
-                    active_connections[kick_addr].close()
+            if response.startswith("@QUIT@"):
+                if conn:  # Only for real connections
+                    conn.sendall(b"\r\nGoodbye!\r\n")
+                    conn.close()
                 return
-
             if response.startswith("@BROADCAST@"):
-                parts = response.split("@", 2)  # Split into max 3 parts
+                parts = response.split("@", 2)
                 broadcast_msg = parts[2] if len(parts) > 2 else ""
                 username = user_manager.get_username(addr)
                 broadcast_message(
-                    active_connections, f"[BROADCAST] {username}: {broadcast_msg}"
+                    active_connections,
+                    f"[BROADCAST] {username}: {broadcast_msg}",
+                    system_msg=True,
                 )
                 return
-
-            if response.startswith("@QUIT@"):
-                conn.sendall(b"\r\nGoodbye!\r\n")
-                conn.close()
+            if response.startswith("@KICK@"):
+                # Handle kick command
+                target_addr = eval(
+                    response.split("@")[2]
+                )  # Safe since we control the string
+                if target_addr in active_connections:
+                    active_connections[target_addr].sendall(
+                        b"\r\nYou have been kicked.\r\n"
+                    )
+                    active_connections[target_addr].close()
                 return
-
-            conn.sendall(f"\r\n{response}\r\n".encode("ascii"))
+            if response and conn:  # Only send response if there's a connection
+                conn.sendall(f"\r\n{response}\r\n".encode("ascii"))
         else:
             # Regular chat message
             username = user_manager.get_username(addr)
 
             # Check if user is authenticated (not a guest)
             if username.startswith("guest_"):
-                conn.sendall(
-                    b"\r\nYou must be logged in to chat. Use /help for commands.\r\n"
-                )
+                if conn:  # Only send if there's a connection
+                    conn.sendall(
+                        b"\r\nYou must be logged in to chat. Use /help for commands.\r\n"
+                    )
                 return
 
             # Check rate limit
             if user_manager.is_rate_limited(addr):
-                conn.sendall(b"\r\nRate limit exceeded. Please wait a moment.\r\n")
+                if conn:  # Only send if there's a connection
+                    conn.sendall(b"\r\nRate limit exceeded. Please wait a moment.\r\n")
                 return
 
             # Broadcast the message
@@ -122,8 +116,11 @@ def process_complete_line(line, addr, active_connections, conn):
                 addr,
                 room,
             )
-            # Send back to sender
-            conn.sendall(f"\r\n{message_with_user}\r\n".encode("ascii"))
+
+            # For console, print locally instead of sending
+            if not conn:
+                print(f"\r\n{message_with_user}\r\n")
+
     except UnicodeDecodeError:
         print("UnicodeDecodeError: ", line)
 
