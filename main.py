@@ -42,9 +42,10 @@ def process_input_byte(byte, display_buffer, conn):
     if byte in (127, 8):  # Backspace/delete
         return handle_backspace(display_buffer, conn)
 
-    # Add character to display buffer and echo back
-    display_buffer += bytes([byte])
-    conn.sendall(bytes([byte]))
+    # Only accept printable ASCII characters (32-126)
+    if 32 <= byte <= 126:
+        display_buffer += bytes([byte])
+        conn.sendall(bytes([byte]))
     return display_buffer
 
 
@@ -59,7 +60,8 @@ def process_complete_line(line, addr, active_connections, conn):
         if message.startswith("/"):
             response = command_processor.process_command(message[1:], addr)
             if response.startswith("@QUIT@"):
-                if conn:  # Only for real connections
+                if conn:
+                    cleanup_client_connection(addr)  # Clean up first
                     conn.sendall(b"\r\nGoodbye!\r\n")
                     conn.close()
                 return
